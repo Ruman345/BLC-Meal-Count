@@ -891,7 +891,7 @@ function renderReport(){
   if(!data.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">No records found</td></tr>';return;}
   tbody.innerHTML=data.map((r,i)=>`
     <tr>
-      <td>${i+1}</td><td>${r.date||''}<br><span style="font-size:11px;color:var(--muted);">${r.time||''}</span></td>
+      <td>${i+1}</td><td>${r.date||''}<br><span style="font-size:11px;color:var(--muted);">${formatTime(r.time)||''}</span></td>
       <td><b>${r.postedBy||''}</b></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:12px;">${r.pin||'—'}</span></td>
       <td class="num">${r.breakfast||0}</td>
@@ -928,7 +928,7 @@ function renderHistory(){
     const rows = recs.map((r,i)=>`
       <tr>
         <td>${i+1}</td>
-        <td><b>${r.postedBy||''}</b><br><span style="font-size:11px;color:var(--muted);">${r.time||''}</span></td>
+        <td><b>${r.postedBy||''}</b><br><span style="font-size:11px;color:var(--muted);">${formatTime(r.time)||''}</span></td>
         <td><span style="font-family:'DM Mono',monospace;font-size:12px;">${r.pin||'—'}</span></td>
         <td class="num">${r.breakfast||0}</td>
         <td class="num">${r.msnacks||0}</td>

@@ -427,7 +427,7 @@ td.num{font-family:'DM Mono',monospace;font-weight:600;color:var(--green2);}
 <div class="toast" id="toast"></div>
 
 <script>
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyd7NuDS7RcVB_yKbhz8fW_Ij3ww8JXvE9aols6im6qsIrssFfUEe7UTHh0WSJGjKwzeg/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxFrB76f4mrRk-iSmDtsauWqSXZQlH0xZ-dyaAhnwPYr3I7ph8xQ1eR68QZh_wE3-AzQg/exec';
 const STAFF_CODE = 'BLC@2024';
 const ADMIN_CODE = 'BLCADMIN@2024';
 
@@ -461,11 +461,13 @@ function formatDate(raw){
   return dd+'.'+mm+'.'+yyyy;
 }
 
-// FORMAT TIME — Sheets sends time as "1899-12-30T07:19:40.000Z" or already "8:14 AM"
+// FORMAT TIME — Handles multiple formats from Google Sheets
 function formatTime(raw){
   if(!raw) return '';
   const s = String(raw).trim();
+  // Already formatted: "8:14 AM"
   if(/^\d{1,2}:\d{2}\s*(AM|PM)/i.test(s)) return s;
+  // ISO format: "1899-12-30T07:19:40.000Z"
   if(/^1899-12-30T/.test(s)){
     const d = new Date(s);
     if(!isNaN(d)){
@@ -475,6 +477,26 @@ function formatTime(raw){
       h = h % 12 || 12;
       return `${h}:${min} ${ampm}`;
     }
+  }
+  // "Sat Dec 30 1899 08:53:00 GMT+0553" format
+  if(/Dec 30 1899/.test(s) || /1899/.test(s)){
+    const d = new Date(s);
+    if(!isNaN(d)){
+      let h = d.getHours();
+      const min = String(d.getMinutes()).padStart(2,'0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${h}:${min} ${ampm}`;
+    }
+  }
+  // Try parsing as generic date and extract time
+  const d = new Date(s);
+  if(!isNaN(d)){
+    let h = d.getHours();
+    const min = String(d.getMinutes()).padStart(2,'0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${min} ${ampm}`;
   }
   return s;
 }

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BLC Sreemangal — Meal Counter</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{--bg:#f5f0e8;--card:#fffdf7;--green:#2d6a4f;--green2:#40916c;--green-light:#d8f3dc;--orange:#e07c24;--orange-light:#fde8cc;--red:#c1440e;--text:#1a2e1a;--muted:#6b7c6b;--border:#d5cbb8;--shadow:0 2px 16px rgba(45,106,79,0.10);}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -146,6 +149,7 @@ td.num{font-family:'DM Mono',monospace;font-weight:600;color:var(--green2);}
   .meal-grid{grid-template-columns:repeat(3,1fr);}
   .summary-cards{grid-template-columns:1fr 1fr;}
   .form-row,.form-row.three{grid-template-columns:1fr;}
+  #reportDownloadRow{grid-template-columns:1fr 1fr!important;}
 }
 </style>
 </head>
@@ -351,37 +355,39 @@ td.num{font-family:'DM Mono',monospace;font-weight:600;color:var(--green2);}
         👤 আপনি শুধু আপনার নিজের entry দেখতে পাচ্ছেন। সব entry দেখতে Admin এর সাথে যোগাযোগ করুন।
       </div>
 
-      <div class="form-card" style="padding:20px 24px;" id="reportFiltersCard">
-        <div class="report-filters">
-          <div class="form-group">
-            <label>Particular</label>
-            <select id="filterEvent"><option value="">All</option></select>
-          </div>
-          <div class="form-group">
-            <label>PIN</label>
-            <select id="filterPin"><option value="">All PINs</option></select>
-          </div>
-          <div class="form-group">
-            <label>From</label>
-            <input type="date" id="filterFrom"/>
-          </div>
-          <div class="form-group">
-            <label>To</label>
-            <input type="date" id="filterTo"/>
-          </div>
-          <div class="form-group admin-only-filter" id="filterUserGroup">
-            <label>Posted By</label>
+      <div class="form-card" style="padding:28px 28px 22px;" id="reportFiltersCard">
+        <div style="font-size:15px;font-weight:700;color:var(--green);margin-bottom:20px;display:flex;align-items:center;gap:8px;">📋 Report Download</div>
+        <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px;" id="reportDownloadRow">
+          <div class="form-group" id="filterUserGroup" style="margin-bottom:0;">
+            <label>Name / Person</label>
             <select id="filterUser"><option value="">All Staff</option></select>
           </div>
-          <button class="btn-filter" onclick="renderReport()">🔍 Filter</button>
-          <button class="btn-filter admin-only" style="background:var(--orange);" onclick="resetToToday()">📅 Today</button>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>From Date</label>
+            <input type="date" id="filterFrom"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>To Date</label>
+            <input type="date" id="filterTo"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Report Type</label>
+            <select id="reportType">
+              <option value="excel">📊 Excel</option>
+              <option value="pdf">📄 PDF</option>
+            </select>
+          </div>
         </div>
-      </div>
+        <!-- PIN filter hidden but functional -->
+        <select id="filterPin" style="display:none;"><option value="">All PINs</option></select>
 
-      <div class="action-row">
-        <button class="btn-action" onclick="exportCSV()">⬇️ Download CSV</button>
-        <button class="btn-action" onclick="doPrint()">🖨️ Print</button>
-        <button class="btn-action" onclick="loadData()">🔄 Refresh</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;align-items:center;">
+          <button class="btn-submit" style="width:auto;padding:12px 28px;font-size:15px;" onclick="downloadReport()">⬇️ Report Download</button>
+          <button class="btn-filter" style="background:var(--orange);padding:12px 18px;" onclick="resetToToday()">📅 Today</button>
+          <button class="btn-filter" style="background:#6c757d;padding:12px 18px;" onclick="clearFilters()">🗑️ Clear</button>
+          <button class="btn-filter" style="background:var(--green2);padding:12px 18px;" onclick="loadData()">🔄 Refresh</button>
+          <button class="btn-filter" style="background:#555;padding:12px 18px;" onclick="doPrint()">🖨️ Print</button>
+        </div>
       </div>
 
       <div class="summary-cards" id="summaryCards"></div>
@@ -394,7 +400,7 @@ td.num{font-family:'DM Mono',monospace;font-weight:600;color:var(--green2);}
             <th class="num">🍱 Lunch</th>
             <th class="num">🍵 E.Snacks</th>
             <th class="num">🍽️ Dinner</th>
-            <th class="num">Total</th><th>Remarks</th>
+            <th class="num">Total</th>
           </tr></thead>
           <tbody id="reportBody"></tbody>
         </table>
@@ -448,13 +454,26 @@ async function apiPost(payload){await fetch(SHEET_URL,{method:'POST',body:JSON.s
 function formatDate(raw){
   if(!raw) return '';
   const s = String(raw).trim();
-  // YYYY-MM-DD format (Apps Script sends this)
+  // YYYY-MM-DD format
   if(/^\d{4}-\d{2}-\d{2}/.test(s)){
     const [yyyy,mm,dd] = s.substring(0,10).split('-');
     return `${dd}.${mm}.${yyyy}`;
   }
   // DD.MM.YYYY already formatted
   if(/^\d{2}\.\d{2}\.\d{4}/.test(s)) return s;
+  // DD/MM/YYYY
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)){
+    const parts = s.split('/');
+    return `${parts[0].padStart(2,'0')}.${parts[1].padStart(2,'0')}.${parts[2].substring(0,4)}`;
+  }
+  // Google Sheets raw Date string — parse and reformat
+  const parsed = new Date(s);
+  if(!isNaN(parsed.getTime()) && parsed.getFullYear() >= 1970){
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth()+1).padStart(2,'0');
+    const dd = String(parsed.getDate()).padStart(2,'0');
+    return `${dd}.${mm}.${yyyy}`;
+  }
   return s;
 }
 
@@ -462,14 +481,39 @@ function formatDate(raw){
 function toRawDate(val){
   if(!val) return '';
   const s = String(val).trim();
-  // YYYY-MM-DD — just return first 10 chars
+  if(!s) return '';
+  // Already YYYY-MM-DD
   if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
-  // DD.MM.YYYY → YYYY-MM-DD
+  // DD.MM.YYYY
   if(/^\d{2}\.\d{2}\.\d{4}/.test(s)){
-    const [dd,mm,yyyy] = s.split('.');
-    return `${yyyy}-${mm}-${dd}`;
+    const p=s.split('.');
+    return p[2]+'-'+p[1]+'-'+p[0];
   }
-  return s;
+  // DD/MM/YYYY
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)){
+    const p=s.split('/');
+    return p[2].substring(0,4)+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+  }
+  // Google Sheets: "Thu Apr 01 2026 ..." OR "Wed Apr 01" (no year)
+  const mmap={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+  // With year: "Thu Apr 01 2026"
+  const gm=s.match(/\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/);
+  if(gm && parseInt(gm[3])>=1970){
+    return gm[3]+'-'+(mmap[gm[1]]||'01')+'-'+gm[2].padStart(2,'0');
+  }
+  // Without year: "Wed Apr 01" — use current year
+  const gm2=s.match(/^\w{3}\s+(\w{3})\s+(\d{1,2})$/);
+  if(gm2){
+    const yyyy=new Date().getFullYear();
+    return yyyy+'-'+(mmap[gm2[1]]||'01')+'-'+gm2[2].padStart(2,'0');
+  }
+  // Fallback
+  const parsed=new Date(s);
+  if(!isNaN(parsed.getTime()) && parsed.getFullYear()>=1970){
+    const ls=parsed.toLocaleDateString('en-CA',{timeZone:'Asia/Dhaka'});
+    if(ls && /^\d{4}-\d{2}-\d{2}/.test(ls)) return ls.substring(0,10);
+  }
+  return '';
 }
 
 // PARSE DATA
@@ -478,7 +522,8 @@ function parseData(data){
   records=(data.meals||[]).filter(r=>
     r[0] && String(r[0]).trim() !== '' && String(r[0]).toLowerCase() !== 'id'
   ).map(r=>{
-    // format চেনার উপায়: r[3] যদি name (string) হয় তাহলে নতুন format
+    // Debug: log raw date value to console
+    if(r[1]) console.log('[DATE DEBUG] raw r[1]:', r[1], '→ toRawDate:', toRawDate(r[1]));
     const isNewFormat = isNaN(Number(r[3])) || r.length <= 12;
     if(isNewFormat){
       return {
@@ -580,7 +625,6 @@ async function doLogin(){
 
   // Show/hide admin-only tabs
   document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin?'':'none');
-  document.getElementById('filterUserGroup').style.display=isAdmin?'flex':'none';
 
   setReportDefaultDates();
   renderHistory();renderReport();renderUsers();
@@ -611,13 +655,13 @@ function showPage(name,el){
   if(name==='users')renderUsers();
 }
 
-// FORMAT TIME — converts "HH:MM:SS" or any time string to readable format
+// FORMAT TIME — converts various time formats to readable HH:MM AM/PM
 function formatTime(raw){
   if(!raw) return '';
   const s = String(raw).trim();
   // Already formatted like "10:30 AM"
   if(/\d{1,2}:\d{2}\s?(AM|PM)/i.test(s)) return s;
-  // HH:MM or HH:MM:SS
+  // Pure HH:MM or HH:MM:SS (no date prefix)
   if(/^\d{1,2}:\d{2}/.test(s)){
     const parts = s.split(':');
     let h = parseInt(parts[0]);
@@ -626,7 +670,18 @@ function formatTime(raw){
     h = h % 12 || 12;
     return `${h}:${m} ${ampm}`;
   }
-  return s;
+  // Google Sheets sometimes sends a full date string like "Sat Dec 30 1899 23:24:00 GMT+0553"
+  // Extract HH:MM from it
+  const timeMatch = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
+  if(timeMatch){
+    let h = parseInt(timeMatch[1]);
+    const m = timeMatch[2];
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ampm}`;
+  }
+  // Unrecognizable — return empty
+  return '';
 }
 
 // COUNTER
@@ -800,67 +855,102 @@ function getMyRecords(){
 
 // FILTERS
 function populateFilters(){
-  const data=getMyRecords();
-  const evSel=document.getElementById('filterEvent');
+  const isAdmin = me && me.role === 'admin';
+  const base = isAdmin ? records : getMyRecords();
   const pinSel=document.getElementById('filterPin');
   const usrSel=document.getElementById('filterUser');
-  const events=[...new Set(data.map(r=>r.event).filter(Boolean))];
-  const pins=[...new Set(data.map(r=>r.pin).filter(Boolean))];
+
+  // Save current selections before rebuilding
+  const savedPin = pinSel.value;
+  const savedUsr = usrSel.value;
+
+  const pins=[...new Set(base.map(r=>r.pin).filter(Boolean))];
   const staff=[...new Set(records.map(r=>r.postedBy).filter(Boolean))];
-  evSel.innerHTML='<option value="">All</option>'+events.map(e=>`<option>${e}</option>`).join('');
+
   pinSel.innerHTML='<option value="">All PINs</option>'+pins.map(p=>`<option>${p}</option>`).join('');
-  usrSel.innerHTML='<option value="">All Staff</option>'+staff.map(s=>`<option>${s}</option>`).join('');
+
+  if(isAdmin){
+    usrSel.innerHTML='<option value="">All Staff</option>'+staff.map(s=>`<option value="${s}">${s}</option>`).join('');
+    // Restore selection
+    usrSel.value = savedUsr;
+  } else {
+    usrSel.innerHTML=`<option value="">${me.fullName} (You)</option>`;
+    usrSel.value='';
+  }
+  // Restore pin selection
+  pinSel.value = savedPin;
+
+  document.getElementById('filterUserGroup').style.display = isAdmin ? '' : 'none';
 }
 
 function getFiltered(){
-  const base=getMyRecords();
-  const ev=document.getElementById('filterEvent').value;
+  const isAdmin = me && me.role === 'admin';
+  const base = isAdmin ? records : getMyRecords();
   const pin=document.getElementById('filterPin').value;
   const from=document.getElementById('filterFrom').value;
   const to=document.getElementById('filterTo').value;
-  const usr=me.role==='admin'?document.getElementById('filterUser').value:'';
-  return base.filter(r=>{
-    if(ev&&r.event!==ev)return false;
+  const usr=isAdmin ? document.getElementById('filterUser').value.trim() : '';
+  console.log('[FILTER] from='+from+' to='+to+' total records='+base.length);
+  const filtered = base.filter(r=>{
     if(pin&&r.pin!==pin)return false;
-    // rawDate is YYYY-MM-DD, filterFrom/To are also YYYY-MM-DD — compare directly
-    const rd = r.rawDate ? String(r.rawDate).trim() : '';
-    if(from&&rd<from)return false;
-    if(to&&rd>to)return false;
-    if(usr&&r.postedBy!==usr)return false;
+    // Always normalize to YYYY-MM-DD for reliable comparison
+    const rd = toRawDate(r.rawDate || r.date || '');
+    console.log('[FILTER] rd='+rd+' rawDate='+r.rawDate+' date='+r.date);
+    if(from&&rd&&rd<from)return false;
+    if(to&&rd&&rd>to)return false;
+    if(!rd) return true; // if date unknown, include it
+    if(usr){
+      const match = (r.postedBy||'').trim()===usr || (r.username||'').trim()===usr;
+      if(!match) return false;
+    }
     return true;
   });
+  console.log('[FILTER] result count='+filtered.length);
+  return filtered;
+}
+
+function clearFilters(){
+  const fromEl=document.getElementById('filterFrom');
+  const toEl=document.getElementById('filterTo');
+  document.getElementById('filterPin').value='';
+  document.getElementById('filterUser').value='';
+  if(fromEl){fromEl.value='';fromEl.dataset.userSet='1';} // mark as user-set so renderReport won't reset to today
+  if(toEl){toEl.value='';toEl.dataset.userSet='1';}
+  renderReport();
 }
 
 function resetToToday(){
   const today = getTodayBD();
   const fromEl = document.getElementById('filterFrom');
   const toEl   = document.getElementById('filterTo');
-  if(fromEl){ fromEl.value = today; delete fromEl.dataset.userSet; }
-  if(toEl)  { toEl.value   = today; delete toEl.dataset.userSet; }
+  if(fromEl){ fromEl.value = today; fromEl.dataset.userSet='1'; }
+  if(toEl)  { toEl.value   = today; toEl.dataset.userSet='1'; }
   renderReport();
 }
 
-// Set today as default date range in report filters (Admin only)
+// Set today as default ONLY on first login (not on every renderReport call)
 function setReportDefaultDates(){
-  if(!me || me.role !== 'admin') return;
-  const today = getTodayBD();
-  const fromEl = document.getElementById('filterFrom');
-  const toEl   = document.getElementById('filterTo');
-  if(fromEl && !fromEl.dataset.userSet) fromEl.value = today;
-  if(toEl   && !toEl.dataset.userSet)   toEl.value   = today;
+  // Do nothing — dates start blank so all records show by default
+  // User must click Today or manually pick dates to filter by date
 }
 
 // Track if user manually changed date filters
 document.addEventListener('DOMContentLoaded', ()=>{
   ['filterFrom','filterTo'].forEach(id=>{
     const el = document.getElementById(id);
-    if(el) el.addEventListener('change', ()=>{ el.dataset.userSet = '1'; });
+    if(el) el.addEventListener('change', ()=>{ el.dataset.userSet = '1'; renderReport(); });
   });
+  const userSel = document.getElementById('filterUser');
+  if(userSel) userSel.addEventListener('change', renderReport);
+  const pinSel = document.getElementById('filterPin');
+  if(pinSel) pinSel.addEventListener('change', renderReport);
 });
 
 // REPORT
 function renderReport(){
   if(!me) return;
+  // Set default dates first (today) if not user-set
+  setReportDefaultDates();
   populateFilters();
   const isAdmin=me&&me.role==='admin';
   document.getElementById('staffReportNotice').style.display=isAdmin?'none':'block';
@@ -869,8 +959,11 @@ function renderReport(){
   const T={breakfast:0,msnacks:0,lunch:0,esnacks:0,dinner:0,total:0};
   data.forEach(r=>{T.breakfast+=r.breakfast||0;T.msnacks+=r.msnacks||0;T.lunch+=r.lunch||0;T.esnacks+=r.esnacks||0;T.dinner+=r.dinner||0;T.total+=r.total||0;});
 
+  const personsLabel = isAdmin ? 'Persons' : 'Entries';
+  const personsIcon  = isAdmin ? '👤' : '📝';
+
   document.getElementById('summaryCards').innerHTML=`
-    <div class="sum-card"><div class="sum-icon">👤</div><div><div class="sum-label">Persons</div><div class="sum-val">${data.length}</div></div></div>
+    <div class="sum-card"><div class="sum-icon">${personsIcon}</div><div><div class="sum-label">${personsLabel}</div><div class="sum-val">${data.length}</div></div></div>
     <div class="sum-card"><div class="sum-icon">🍽️</div><div><div class="sum-label">Total Meals</div><div class="sum-val">${T.total}</div></div></div>
     <div class="sum-card"><div class="sum-icon">🌅</div><div><div class="sum-label">Breakfast</div><div class="sum-val">${T.breakfast}</div></div></div>
     <div class="sum-card"><div class="sum-icon">🥐</div><div><div class="sum-label">M. Snacks</div><div class="sum-val">${T.msnacks}</div></div></div>
@@ -882,7 +975,8 @@ function renderReport(){
   if(!data.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">No records found</td></tr>';return;}
   tbody.innerHTML=data.map((r,i)=>`
     <tr>
-      <td>${i+1}</td><td>${r.date||''}<br><span style="font-size:11px;color:var(--muted);">${formatTime(r.time)||''}</span></td>
+      <td>${i+1}</td>
+      <td style="white-space:nowrap;">${r.date||''}</td>
       <td><b>${r.postedBy||''}</b></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:12px;">${r.pin||'—'}</span></td>
       <td class="num">${r.breakfast||0}</td>
@@ -891,7 +985,6 @@ function renderReport(){
       <td class="num">${r.esnacks||0}</td>
       <td class="num">${r.dinner||0}</td>
       <td class="num" style="color:var(--green);font-weight:800;">${r.total||0}</td>
-      <td class="remarks-cell">${r.remarks||'—'}</td>
     </tr>`).join('');
 }
 
@@ -974,23 +1067,102 @@ function renderUsers(){
     </div>`).join('');
 }
 
-// CSV
-function exportCSV(){
+// DOWNLOAD REPORT — single button handles Excel + PDF
+function downloadReport(){
+  const type = document.getElementById('reportType').value;
+  // Do NOT call renderReport() here — it resets dates and corrupts the filter!
+  if(type === 'excel') exportExcel();
+  else exportPDF();
+}
+function exportExcel(){
   const data=getFiltered();
   if(!data.length){toast('No data to export','error');return;}
-  const h=['#','Date','Time','Full Name','PIN','Breakfast','M.Snacks','Lunch','E.Snacks','Dinner','Total','Remarks'];
-  const rows=data.map((r,i)=>[
-    i+1, r.date, r.time||'', `"${r.postedBy||''}"`, r.pin||'',
-    r.breakfast||0, r.msnacks||0, r.lunch||0, r.esnacks||0,
-    r.dinner||0, r.total||0, `"${r.remarks||''}"`
-  ]);
-  const csv=[h,...rows].map(r=>r.join(',')).join('\n');
-  const a=document.createElement('a');
   const bdDate=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Dhaka'});
-  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download='BLC_Meals_'+bdDate+'.csv';
-  a.click();
-  toast('✅ CSV downloaded!');
+  const filterUser=document.getElementById('filterUser').value;
+  const personLabel = filterUser ? filterUser : 'All Staff';
+
+  // Summary sheet data
+  const T={breakfast:0,msnacks:0,lunch:0,esnacks:0,dinner:0,total:0};
+  data.forEach(r=>{T.breakfast+=r.breakfast||0;T.msnacks+=r.msnacks||0;T.lunch+=r.lunch||0;T.esnacks+=r.esnacks||0;T.dinner+=r.dinner||0;T.total+=r.total||0;});
+
+  const wb = XLSX.utils.book_new();
+
+  // Detail sheet
+  const header=['#','Date','Name','PIN','Breakfast','M.Snacks','Lunch','E.Snacks','Dinner','Total'];
+  const rows=data.map((r,i)=>[i+1, r.date||'', r.postedBy||'', r.pin||'', r.breakfast||0, r.msnacks||0, r.lunch||0, r.esnacks||0, r.dinner||0, r.total||0]);
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['BLC Sreemangal — Meal Report'],
+    [`Person: ${personLabel}  |  Date: ${bdDate}`],
+    [],
+    header,
+    ...rows,
+    [],
+    ['','','','TOTAL',T.breakfast,T.msnacks,T.lunch,T.esnacks,T.dinner,T.total]
+  ]);
+  ws['!cols']=[{wch:4},{wch:14},{wch:24},{wch:10},{wch:11},{wch:11},{wch:10},{wch:11},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,'Meal Report');
+
+  XLSX.writeFile(wb,`BLC_Meals_${personLabel.replace(/ /g,'_')}_${bdDate}.xlsx`);
+  toast('✅ Excel downloaded!');
+}
+
+// PDF EXPORT
+function exportPDF(){
+  const data=getFiltered();
+  if(!data.length){toast('No data to export','error');return;}
+  const bdDate=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Dhaka'});
+  const filterUser=document.getElementById('filterUser').value;
+  const personLabel = filterUser ? filterUser : 'All Staff';
+
+  const T={breakfast:0,msnacks:0,lunch:0,esnacks:0,dinner:0,total:0};
+  data.forEach(r=>{T.breakfast+=r.breakfast||0;T.msnacks+=r.msnacks||0;T.lunch+=r.lunch||0;T.esnacks+=r.esnacks||0;T.dinner+=r.dinner||0;T.total+=r.total||0;});
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+
+  // Header
+  doc.setFillColor(45,106,79);
+  doc.rect(0,0,297,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(14);doc.setFont(undefined,'bold');
+  doc.text('BLC Sreemangal — Meal Report',14,10);
+  doc.setFontSize(9);doc.setFont(undefined,'normal');
+  doc.text(`Person: ${personLabel}   |   Date: ${bdDate}   |   Total Records: ${data.length}`,14,17);
+
+  // Summary row
+  doc.setTextColor(45,106,79);
+  doc.setFontSize(9);doc.setFont(undefined,'bold');
+  doc.text(`Summary:  Breakfast: ${T.breakfast}  |  M.Snacks: ${T.msnacks}  |  Lunch: ${T.lunch}  |  E.Snacks: ${T.esnacks}  |  Dinner: ${T.dinner}  |  TOTAL: ${T.total}`,14,30);
+
+  doc.autoTable({
+    startY:34,
+    head:[['#','Date','Name','PIN','Bfast','M.Snk','Lunch','E.Snk','Dinner','Total']],
+    body:[
+      ...data.map((r,i)=>[
+        i+1,
+        r.date||'',
+        r.postedBy||'',
+        r.pin||'',
+        r.breakfast||0, r.msnacks||0, r.lunch||0, r.esnacks||0, r.dinner||0, r.total||0
+      ]),
+      ['','','TOTAL','',T.breakfast,T.msnacks,T.lunch,T.esnacks,T.dinner,T.total]
+    ],
+    headStyles:{fillColor:[45,106,79],textColor:255,fontStyle:'bold',fontSize:9},
+    bodyStyles:{fontSize:8},
+    columnStyles:{0:{cellWidth:8},1:{cellWidth:24},2:{cellWidth:42},3:{cellWidth:18},4:{cellWidth:15},5:{cellWidth:15},6:{cellWidth:15},7:{cellWidth:15},8:{cellWidth:15},9:{cellWidth:15}},
+    alternateRowStyles:{fillColor:[216,243,220]},
+    didParseCell:function(d){
+      if(d.row.index===data.length){
+        d.cell.styles.fontStyle='bold';
+        d.cell.styles.fillColor=[45,106,79];
+        d.cell.styles.textColor=255;
+      }
+    },
+    margin:{left:14,right:14}
+  });
+
+  doc.save(`BLC_Meals_${personLabel.replace(/ /g,'_')}_${bdDate}.pdf`);
+  toast('✅ PDF downloaded!');
 }
 
 function doPrint(){

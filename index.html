@@ -532,7 +532,7 @@ const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyYSUuRnN6hycIcr5nvDf
 const STAFF_CODE = 'BLC@2024';
 const ADMIN_CODE = 'BLCADMIN@2024';
 
-const MEAL_RATES={breakfast:40,msnacks:0,lunch:80,esnacks:0,dinner:80};
+const MEAL_RATES={breakfast:50,msnacks:0,lunch:90,esnacks:0,dinner:90};
 function calcAmount(r){return (r.breakfast||0)*MEAL_RATES.breakfast+(r.msnacks||0)*MEAL_RATES.msnacks+(r.lunch||0)*MEAL_RATES.lunch+(r.esnacks||0)*MEAL_RATES.esnacks+(r.dinner||0)*MEAL_RATES.dinner;}
 function realTotal(r){return (r.breakfast||0)+(r.msnacks||0)+(r.lunch||0)+(r.esnacks||0)+(r.dinner||0);}
 let records=[], users=[], counts={breakfast:0,msnacks:0,lunch:0,esnacks:0,dinner:0}, me=null;
